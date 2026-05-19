@@ -11,38 +11,43 @@ st.set_page_config(page_title="空気圧配管 圧力損失シミュレーター
 # ==========================================
 st.sidebar.header("シミュレーションモード")
 mode = st.sidebar.radio(
-    "検証する回路構成を選択", 
-    ["➡️ 直列モデル (1本道)", "🔀 並列・分岐モデル (3エリア拡張版)"]
+    "メニューを選択", 
+    [
+        "➡️ 直列モデル (1本道)", 
+        "🔀 並列・分岐モデル (3エリア拡張版)",
+        "📖 使い方・Tips集 (FAQ)"  # ← 新しく追加！
+    ]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.header("1. 環境・流体条件")
-t = st.sidebar.slider("温度 t [℃]", min_value=0.0, max_value=50.0, value=20.0, step=1.0)
-p_gage = st.sidebar.number_input("供給圧力 p1_gage [kPa]", value=50.0)
-phi = st.sidebar.slider("相対湿度 φ", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+if mode != "📖 使い方・Tips集 (FAQ)":
+    st.sidebar.header("1. 環境・流体条件")
+    t = st.sidebar.slider("温度 t [℃]", min_value=0.0, max_value=50.0, value=20.0, step=1.0)
+    p_gage = st.sidebar.number_input("供給圧力 p1_gage [kPa]", value=50.0)
+    phi = st.sidebar.slider("相対湿度 φ", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
 
-st.sidebar.header("2. グラフ描画範囲")
-q_min = st.sidebar.number_input("最小流量 Q_min [L/min]", value=1.0)
-q_max = st.sidebar.number_input("最大流量 Q_max [L/min]", value=30.0)
+    st.sidebar.header("2. グラフ描画範囲")
+    q_min = st.sidebar.number_input("最小流量 Q_min [L/min]", value=1.0)
+    q_max = st.sidebar.number_input("最大流量 Q_max [L/min]", value=30.0)
 
-with st.sidebar.expander("⚙️ 初期条件・物理定数の詳細設定"):
-    p0_hPa = st.number_input("大気圧 p0 [hPa]", value=1013.25, format="%.2f")
-    T0_C = st.number_input("基準温度 T0 [℃]", value=0.0, format="%.2f")
-    rho0_std = st.number_input("基準空気密度 ρ0 [kg/m³]", value=1.293, format="%.3f")
-    mu0_e5 = st.number_input("基準粘度 μ0 [×10⁻⁵ Pa・s]", value=1.716, format="%.3f")
-    C = st.number_input("サザーランド定数 C [K]", value=111.0, format="%.1f")
+    with st.sidebar.expander("⚙️ 初期条件・物理定数の詳細設定"):
+        p0_hPa = st.number_input("大気圧 p0 [hPa]", value=1013.25, format="%.2f")
+        T0_C = st.number_input("基準温度 T0 [℃]", value=0.0, format="%.2f")
+        rho0_std = st.number_input("基準空気密度 ρ0 [kg/m³]", value=1.293, format="%.3f")
+        mu0_e5 = st.number_input("基準粘度 μ0 [×10⁻⁵ Pa・s]", value=1.716, format="%.3f")
+        C = st.number_input("サザーランド定数 C [K]", value=111.0, format="%.1f")
 
-# 物理特性の事前計算
-p0 = p0_hPa * 100.0
-T0 = T0_C + 273.15
-mu0 = mu0_e5 * 1e-5
-T = T0 + t
-p1 = p0 + p_gage * 1000.0
-p_s = 610.78 * (10 ** ((7.5 * t) / (t + 237.3)))
-rho0 = rho0_std * (T0 / T) * ((p0 - 0.5040 * phi * p_s) / p0)
-rho1 = rho0 * (p1 / p0)
-mu = mu0 * ((T0 + C) / (T + C)) * ((T / T0) ** 1.5)
-nu1 = mu / rho1
+    # 物理特性の事前計算
+    p0 = p0_hPa * 100.0
+    T0 = T0_C + 273.15
+    mu0 = mu0_e5 * 1e-5
+    T = T0 + t
+    p1 = p0 + p_gage * 1000.0
+    p_s = 610.78 * (10 ** ((7.5 * t) / (t + 237.3)))
+    rho0 = rho0_std * (T0 / T) * ((p0 - 0.5040 * phi * p_s) / p0)
+    rho1 = rho0 * (p1 / p0)
+    mu = mu0 * ((T0 + C) / (T + C)) * ((T / T0) ** 1.5)
+    nu1 = mu / rho1
 
 # ==========================================
 # 2. データベース ＆ コア計算エンジン
@@ -271,6 +276,7 @@ def render_math_proof(details):
                 st.latex(rf"u = {res['u']:.2f}\ \text{{m/s}}, \quad \zeta = {res['zeta']:.2f}")
                 st.latex(rf"\Delta p_f = \zeta \frac{{\rho u^2}}{{2}} = \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}")
 
+
 # ==========================================
 # 4. モード別 メインレイアウト
 # ==========================================
@@ -296,7 +302,6 @@ if mode == "➡️ 直列モデル (1本道)":
         st.subheader("③ 流量と全圧力損失のシミュレーション")
         Q_array = np.linspace(q_min, q_max, 30)
         
-        # グラフ描画用のデータとCSV出力用のデータを一緒に取得
         results_series = [calc_total_loss_system(q, st.session_state.elements_series, p1, rho0, nu1) for q in Q_array]
         dp_array = [res[0] for res in results_series]
 
@@ -309,7 +314,6 @@ if mode == "➡️ 直列モデル (1本道)":
         ax.legend()
         st.pyplot(fig)
         
-        # --- CSV作成機能 (直列) ---
         csv_lines = ["流量 Q [L/min],全圧力損失 dP [kPa]"]
         for q, dp in zip(Q_array, dp_array):
             csv_lines.append(f"{q:.2f},{dp:.3f}")
@@ -317,7 +321,7 @@ if mode == "➡️ 直列モデル (1本道)":
         
         st.download_button(
             label="📥 グラフデータをCSVでダウンロード (Excel対応)",
-            data=csv_data.encode("utf-8-sig"), # 文字化け防止のUTF-8 BOM付き
+            data=csv_data.encode("utf-8-sig"),
             file_name="series_simulation_results.csv",
             mime="text/csv",
             use_container_width=True
@@ -330,7 +334,7 @@ if mode == "➡️ 直列モデル (1本道)":
         st.success(f"**システム全体の圧力損失 Δp = {total_dp:.3f} kPa**")
         render_math_proof(details)
 
-else:
+elif mode == "🔀 並列・分岐モデル (3エリア拡張版)":
     st.title("空気圧配管系の流動損失シミュレーター (並列 3エリア版)")
     st.markdown("共通入口から流入した空気が分岐点でルートA・Bに分かれ、再び合流して共通出口へ向かうシステム全体をシミュレーションします。")
     
@@ -371,7 +375,6 @@ else:
         st.subheader("③ 全流量に対する圧力損失のシミュレーション")
         Q_array = np.linspace(q_min, q_max, 20)
         
-        # グラフ描画用とCSV用の詳細データを一気に計算してリストに格納
         results_parallel = [calc_3area_system(q, p1, rho0, nu1) for q in Q_array]
         dp_array = [res[0] for res in results_parallel]
 
@@ -384,7 +387,6 @@ else:
         ax.legend()
         st.pyplot(fig)
         
-        # --- CSV作成機能 (並列3エリア) ---
         csv_lines = ["全流量 Q_total [L/min],全圧力損失 dP_total [kPa],入口損失 dP_in [kPa],並列部損失 dP_par [kPa],出口損失 dP_out [kPa],ルートA流量 Q_A [L/min],ルートB流量 Q_B [L/min]"]
         for q, res in zip(Q_array, results_parallel):
             tot_dp, dp_in, dp_par, dp_out, Q_A, Q_B = res[0], res[1], res[2], res[3], res[4], res[5]
@@ -393,7 +395,7 @@ else:
         
         st.download_button(
             label="📥 グラフデータをCSVでダウンロード (Excel対応)",
-            data=csv_data.encode("utf-8-sig"), # 文字化け防止
+            data=csv_data.encode("utf-8-sig"),
             file_name="parallel_simulation_results.csv",
             mime="text/csv",
             use_container_width=True
@@ -424,3 +426,51 @@ else:
         if len(details_out) > 0:
             st.markdown("##### 🟪 共通出口 の計算証明")
             render_math_proof(details_out)
+
+elif mode == "📖 使い方・Tips集 (FAQ)":
+    st.title("📖 シミュレーターの使い方・Tips集")
+    st.markdown("実験装置のモデリングや、流体力学のゼミ発表で迷いやすいポイントをまとめました。研究室での議論や引き継ぎの参考にしてください。")
+    
+    with st.expander("💡 1. 急拡大・急縮小パーツの「長さ L」はどう扱うの？", expanded=True):
+        st.markdown("""
+        **結論：長さの入力は不要です（空欄や `0` で構いません）。**
+        
+        * **理由：** 急拡大（Expansion）や急縮小（Contraction）による圧力損失は、管の長さによる摩擦ではなく、「太さがガクッと変わった瞬間に発生する渦」が原因だからです。
+        * **入力のコツ：** ビルダーで回路を組むときは、`[直管]` $\\rightarrow$ `[急拡大]` $\\rightarrow$ `[直管]` のように、前後の「直管」パーツにそれぞれの長さを入力し、段差の瞬間だけを急拡大・急縮小パーツとして間に挟んでください。
+        """)
+        
+    with st.expander("💡 2. 急拡大・急縮小の「入口」と「出口」の数値の入れ方は？"):
+        st.markdown("""
+        空気が進む向き（FLOW $\\rightarrow$）に合わせて、**段差の手前と奥の管の内径**を入力します。
+        
+        * **急拡大の場合：** `入口` に細い方の内径、`出口` に太い方の内径を入力。
+        * **急縮小の場合：** `入口` に太い方の内径、`出口` に細い方の内径を入力。
+        * ※アプリがこれらの面積比から、自動的に損失係数 $\\zeta$ を理論計算（ボルダ・カルノーの定理など）してくれます。
+        """)
+
+    with st.expander("💡 3. 並列分岐の「T字管」はどう配置するのが正解？"):
+        st.markdown("""
+        **共通入口エリアの最後に「T字」を置くのはNGです。**
+        
+        * **理由：** 共通入口の最後にT字を置くと、ルートAに行く空気も、ルートBに行く空気も、分岐する前に平等に同じ直角曲がりの大ダメージ（$\\zeta=1.5$）を受けてしまうことになり、現実の物理現象とズレてしまいます。
+        * **正しい組み方：** 共通入口は直管のままで終わらせ、**分岐した直後の「ルートA」と「ルートB」それぞれの先頭パーツ**としてT字やエルボを配置します。
+        * 直進して通り抜けるルートには $\\zeta=0.4$ 程度の小さな値を、直角に曲がるルートには $\\zeta=1.5$ の大きな値を手入力することで、正しい流量分配がシミュレーションできます。
+        """)
+
+    with st.expander("💡 4. 「急縮小」と「急収縮」って違うの？"):
+        st.markdown("""
+        **物理現象としては全く同じです。**
+        
+        * **急縮小（きゅうしゅくしょう）：** 流体力学の専門書やJIS規格などで使われる**公式な学術用語**です。「管の形状」が細くなることに着目した言葉です。
+        * **急収縮（きゅうしゅうしゅく）：** 空気圧の現場などでよく使われる表現です。空気が持つ「圧縮性」によって、体積自体も縮むイメージからこう呼ばれることがあります。
+        * **アドバイス：** ゼミの発表資料や卒業論文では、一貫して公式用語である **「急縮小」** に統一しておくのが最も無難で安全です。
+        """)
+
+    with st.expander("💡 5. グラフの横軸にある「ANR」って何？"):
+        st.markdown("""
+        **ANR（基準大気状態）**とは、「温度20℃、絶対圧101.3 kPa（約1気圧）、相対湿度65%」にある空気状態の世界共通ルールです。
+        
+        * 空気は圧縮性を持つため、配管内の圧力が変わると体積も流速も変わってしまいます。
+        * そのため、「もしこの空気を大気開放して1気圧に戻したら、何リットルになるか？」という **ANR基準（L/min ANR）** に統一して流量を評価します。
+        * アプリの裏側では、このANR流量と各地点の圧力を照らし合わせ、配管の奥へ行くほど空気が膨張して流速が上がる現象を厳密に計算しています。
+        """)
