@@ -474,3 +474,35 @@ elif mode == "📖 使い方・Tips集 (FAQ)":
         * そのため、「もしこの空気を大気開放して1気圧に戻したら、何リットルになるか？」という **ANR基準（L/min ANR）** に統一して流量を評価します。
         * アプリの裏側では、このANR流量と各地点の圧力を照らし合わせ、配管の奥へ行くほど空気が膨張して流速が上がる現象を厳密に計算しています。
         """)
+    with st.expander("💡 6. シミュレーターで使用している公式・計算モデル集"):
+        st.markdown("""
+        本シミュレーターでは、以下の流体力学の公式を用いて圧力損失を計算しています。
+        （※流体は圧縮性を考慮し、各パーツ通過時の圧力降下に伴う密度・流速の変化を逐次計算するモデルを採用しています）
+        """)
+        
+        st.markdown("#### ① レイノルズ数 $Re$ と 流速 $u$ の算出")
+        st.markdown("ANR基準の流量から、その地点の圧力 $p$ に応じた実際の流速 $u$ を求め、流れの性質（層流・乱流）を判定します。")
+        st.latex(r"u = \frac{Q_{ANR}}{A} \times \frac{p_0}{p}")
+        st.latex(r"Re = \frac{d \cdot u}{\nu}")
+        
+        st.markdown("#### ② 直管の管摩擦損失 (Darcy-Weisbachの式)")
+        st.markdown("直管を流れる際の壁面との摩擦による損失です。レイノルズ数 $Re$ によって管摩擦係数 $\\lambda$ の算出式（条件）が切り替わります。")
+        st.latex(r"\Delta p_\lambda = \lambda \frac{L}{d} \frac{\rho u^2}{2}")
+        st.markdown("- **層流 ($Re < 2300$) の場合：** ハーゲン・ポアズイユの法則に基づく厳密解")
+        st.latex(r"\lambda = \frac{64}{Re}")
+        st.markdown("- **乱流 ($Re \ge 2300$) の場合：** ブラジウス (Blasius) の実験式")
+        st.latex(r"\lambda = \frac{0.3164}{Re^{0.25}}")
+        
+        st.markdown("#### ③ 急拡大損失 (Borda-Carnotの定理)")
+        st.markdown("管が急に太くなる箇所で、流れが剥離して渦が発生することによる損失です。")
+        st.latex(r"\Delta p_e = \zeta_e \frac{\rho u_1^2}{2} \quad \left(u_1\text{は拡大前の流速}\right)")
+        st.latex(r"\zeta_e = \left(1 - \frac{A_1}{A_2}\right)^2 \quad \left(A_1 < A_2\right)")
+
+        st.markdown("#### ④ 急縮小損失")
+        st.markdown("管が急に細くなる箇所で、流れが一度縮流（ベナ・コントラクタ）を形成した後に拡大する際の損失です。")
+        st.latex(r"\Delta p_c = \zeta_c \frac{\rho u_1^2}{2} \quad \left(u_1\text{は縮小後の流速}\right)")
+        st.latex(r"\zeta_c = 0.5 \left(1 - \frac{A_1}{A_2}\right) \quad \left(A_1 < A_2\right)")
+
+        st.markdown("#### ⑤ 一般継手（エルボ・T字・ソケット等）の損失")
+        st.markdown("継手の形状ごとに定められた固有の損失係数 $\\zeta$ （実験値等）を用いて計算します。")
+        st.latex(r"\Delta p_f = \zeta \frac{\rho u^2}{2}")
