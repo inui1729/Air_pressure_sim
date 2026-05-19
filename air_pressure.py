@@ -57,7 +57,6 @@ fitting_db = {
 }
 
 def calc_total_loss_system(Q_Lmin_ANR, elements, p1_val, rho0_val, nu1_val):
-    """直列に繋がったパーツ群の圧力損失を計算するコア関数"""
     if Q_Lmin_ANR <= 0 or len(elements) == 0: return 0.0, []
     
     Q_m3s_ANR = Q_Lmin_ANR * 1e-3 / 60.0
@@ -121,7 +120,6 @@ def calc_total_loss_system(Q_Lmin_ANR, elements, p1_val, rho0_val, nu1_val):
     return total_dp_kPa, details
 
 def balance_parallel_flow(Q_total, elements_A, elements_B, p1_val, rho0_val, nu1_val):
-    """並列回路において、両ルートの圧力損失が釣り合うように流量を二分探索で自動配分する関数"""
     if Q_total <= 0: return 0.0, 0.0, 0.0
     Q_A_min = 0.0
     Q_A_max = Q_total
@@ -141,37 +139,29 @@ def balance_parallel_flow(Q_total, elements_A, elements_B, p1_val, rho0_val, nu1
     return Q_A, Q_B, dp_A
 
 def calc_3area_system(Q_total, p1_val, rho0_val, nu1_val):
-    """3エリア(共通入口 -> 並列部 -> 共通出口)の直列+並列統合計算"""
     if Q_total <= 0: return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, [], []
     
-    # 1. 共通入口の計算
     dp_in, details_in = calc_total_loss_system(Q_total, st.session_state.elements_in, p1_val, rho0_val, nu1_val)
-    p_branch_Pa = p1_val - (dp_in * 1000.0) # 分岐点の圧力
+    p_branch_Pa = p1_val - (dp_in * 1000.0)
     
-    # 2. 並列部の計算（分岐点の圧力からスタート）
     Q_A, Q_B, dp_par = balance_parallel_flow(Q_total, st.session_state.elements_A, st.session_state.elements_B, p_branch_Pa, rho0_val, nu1_val)
-    p_merge_Pa = p_branch_Pa - (dp_par * 1000.0) # 合流点の圧力
+    p_merge_Pa = p_branch_Pa - (dp_par * 1000.0)
     
-    # 3. 共通出口の計算（合流点の圧力からスタート）
     dp_out, details_out = calc_total_loss_system(Q_total, st.session_state.elements_out, p_merge_Pa, rho0_val, nu1_val)
     
     total_dp = dp_in + dp_par + dp_out
     return total_dp, dp_in, dp_par, dp_out, Q_A, Q_B, p_branch_Pa, p_merge_Pa, details_in, details_out
 
-
 # ==========================================
 # 3. UI共通コンポーネント関数
 # ==========================================
 def update_defaults(prefix, item_id, elements_list, idx):
-    """【新規】セレクトボックスが変更されたとき、デフォルト値を自動設定するコールバック"""
     new_name = st.session_state[f"{prefix}_n_{item_id}"]
     elements_list[idx]["name"] = new_name
     
-    # 選ばれたパーツが「継手 (fitting)」の場合のみ、zetaをリセット
     if fitting_db[new_name]["cat"] == "fitting":
         default_zeta = fitting_db[new_name]["zeta"]
         elements_list[idx]["zeta"] = default_zeta
-        # 画面上のNumber Inputウィジェットの値も強制的に更新
         if f"{prefix}_z_{item_id}" in st.session_state:
             st.session_state[f"{prefix}_z_{item_id}"] = default_zeta
 
@@ -183,7 +173,6 @@ def render_flow_builder(elements_list, prefix):
             st.markdown(f"<div style='margin-top:30px;'><b>{i+1}</b></div>", unsafe_allow_html=True)
             
         with c_type:
-            # on_changeを使って、種類が変わった瞬間にupdate_defaultsを発動させる
             item["name"] = st.selectbox(
                 "種類", 
                 list(fitting_db.keys()), 
@@ -204,7 +193,6 @@ def render_flow_builder(elements_list, prefix):
             if cat == "pipe":
                 item["length"] = st.number_input("長さ L [m]", min_value=0.0, value=float(item.get("length", 0.5)), format="%.2f", key=f"{prefix}_l_{item['id']}")
             elif cat == "fitting":
-                # デフォルト値はitem["zeta"]から取得。手動変更時はそのまま維持される
                 item["zeta"] = st.number_input("損失係数 ζ", min_value=0.0, value=float(item.get("zeta", fitting_db[item["name"]]["zeta"])), format="%.2f", key=f"{prefix}_z_{item['id']}")
             else:
                 item["d2"] = st.number_input("出口 φd_out [mm]", min_value=0.1, value=float(item.get("d2", 4.0)), step=1.0, format="%.1f", key=f"{prefix}_dout_{item['id']}")
@@ -261,28 +249,28 @@ def render_html_diagram(elements_list):
     st.markdown(html_code, unsafe_allow_html=True)
 
 def render_math_proof(details):
-    """【バグ修正版】単位表記のバグを完全に排除しました"""
     for i, res in enumerate(details):
         with st.expander(f"パーツ {i+1} : {res['name']} の計算証明"):
             if res["cat"] == "pipe":
                 st.markdown("**【管摩擦損失 (Eq.2)】**")
                 st.latex(rf"Re = {res['Re']:.1f}, \quad \lambda = {res['lambda_f']:.4f}")
                 st.latex(r"\Delta p_\lambda = p_{in} - \sqrt{p_{in}^2 - \lambda \frac{L}{d} \rho_0 p_0 u_0^2}")
-                st.latex(rf"= \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}") # ← \textの手前のスペースの数を修正
+                st.latex(rf"= \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}")
             elif res["cat"] == "expansion":
                 st.markdown("**【急拡大損失 (Eq.3, 7)】** (ボルダ・カルノーの式)")
                 st.latex(rf"u_1 = {res['u1']:.2f}\ \text{{m/s}}")
                 st.latex(rf"\zeta_e = \left(1 - \frac{{{res['A1']:.2e}}}{{{res['A2']:.2e}}}\right)^2 = {res['zeta']:.3f}")
-                st.latex(rf"\Delta p_e = \zeta_e \frac{{\rho u_1^2}}{{2}} = \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}") # ← rf"" の中の中括弧を{{ }}に二重化してバグを防止
+                st.latex(rf"\Delta p_e = \zeta_e \frac{{\rho u_1^2}}{{2}} = \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}")
             elif res["cat"] == "contraction":
                 st.markdown("**【急縮小損失 (Eq.4, 8)】**")
                 st.latex(rf"u_1 = {res['u1']:.2f}\ \text{{m/s}}")
                 st.latex(rf"\zeta_c = 0.5 \left(1 - \frac{{{res['A1']:.2e}}}{{{res['A2']:.2e}}}\right) = {res['zeta']:.3f}")
-                st.latex(rf"\Delta p_c = \zeta_c \frac{{\rho u_1^2}}{{2}} = \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}") # ← 同上
+                st.latex(rf"\Delta p_c = \zeta_c \frac{{\rho u_1^2}}{{2}} = \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}")
             elif res["cat"] == "fitting":
                 st.markdown("**【一般継手損失】**")
                 st.latex(rf"u = {res['u']:.2f}\ \text{{m/s}}, \quad \zeta = {res['zeta']:.2f}")
-                st.latex(rf"\Delta p_f = \zeta \frac{{\rho u^2}}{{2}} = \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}") # ← 同上
+                st.latex(rf"\Delta p_f = \zeta \frac{{\rho u^2}}{{2}} = \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}")
+
 # ==========================================
 # 4. モード別 メインレイアウト
 # ==========================================
@@ -307,7 +295,10 @@ if mode == "➡️ 直列モデル (1本道)":
     with c_left:
         st.subheader("③ 流量と全圧力損失のシミュレーション")
         Q_array = np.linspace(q_min, q_max, 30)
-        dp_array = [calc_total_loss_system(q, st.session_state.elements_series, p1, rho0, nu1)[0] for q in Q_array]
+        
+        # グラフ描画用のデータとCSV出力用のデータを一緒に取得
+        results_series = [calc_total_loss_system(q, st.session_state.elements_series, p1, rho0, nu1) for q in Q_array]
+        dp_array = [res[0] for res in results_series]
 
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.plot(Q_array, dp_array, marker='o', color='#1f77b4', label="Series Total Loss")
@@ -317,6 +308,20 @@ if mode == "➡️ 直列モデル (1本道)":
         ax.grid(True, linestyle='--', alpha=0.7)
         ax.legend()
         st.pyplot(fig)
+        
+        # --- CSV作成機能 (直列) ---
+        csv_lines = ["流量 Q [L/min],全圧力損失 dP [kPa]"]
+        for q, dp in zip(Q_array, dp_array):
+            csv_lines.append(f"{q:.2f},{dp:.3f}")
+        csv_data = "\n".join(csv_lines)
+        
+        st.download_button(
+            label="📥 グラフデータをCSVでダウンロード (Excel対応)",
+            data=csv_data.encode("utf-8-sig"), # 文字化け防止のUTF-8 BOM付き
+            file_name="series_simulation_results.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
     with c_right:
         st.subheader("④ モデル計算の証明")
@@ -329,11 +334,10 @@ else:
     st.title("空気圧配管系の流動損失シミュレーター (並列 3エリア版)")
     st.markdown("共通入口から流入した空気が分岐点でルートA・Bに分かれ、再び合流して共通出口へ向かうシステム全体をシミュレーションします。")
     
-    # 状態の初期化
     if 'elements_in' not in st.session_state:
         st.session_state.elements_in = [{"id": str(uuid.uuid4()), "name": "直管 (Tube)", "d1": 6.0, "d2": 6.0, "length": 0.5, "zeta": 0.0}]
     if 'elements_out' not in st.session_state:
-        st.session_state.elements_out = [] # 出口は初期状態では空（なし）
+        st.session_state.elements_out = [] 
     if 'elements_A' not in st.session_state:
         st.session_state.elements_A = [{"id": str(uuid.uuid4()), "name": "直管 (Tube)", "d1": 4.0, "d2": 4.0, "length": 1.0, "zeta": 0.0}]
     if 'elements_B' not in st.session_state:
@@ -366,7 +370,10 @@ else:
     with c_left:
         st.subheader("③ 全流量に対する圧力損失のシミュレーション")
         Q_array = np.linspace(q_min, q_max, 20)
-        dp_array = [calc_3area_system(q, p1, rho0, nu1)[0] for q in Q_array]
+        
+        # グラフ描画用とCSV用の詳細データを一気に計算してリストに格納
+        results_parallel = [calc_3area_system(q, p1, rho0, nu1) for q in Q_array]
+        dp_array = [res[0] for res in results_parallel]
 
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.plot(Q_array, dp_array, marker='s', color='#d62728', label="Total Pressure Loss (3 Areas)")
@@ -376,6 +383,21 @@ else:
         ax.grid(True, linestyle='--', alpha=0.7)
         ax.legend()
         st.pyplot(fig)
+        
+        # --- CSV作成機能 (並列3エリア) ---
+        csv_lines = ["全流量 Q_total [L/min],全圧力損失 dP_total [kPa],入口損失 dP_in [kPa],並列部損失 dP_par [kPa],出口損失 dP_out [kPa],ルートA流量 Q_A [L/min],ルートB流量 Q_B [L/min]"]
+        for q, res in zip(Q_array, results_parallel):
+            tot_dp, dp_in, dp_par, dp_out, Q_A, Q_B = res[0], res[1], res[2], res[3], res[4], res[5]
+            csv_lines.append(f"{q:.2f},{tot_dp:.3f},{dp_in:.3f},{dp_par:.3f},{dp_out:.3f},{Q_A:.2f},{Q_B:.2f}")
+        csv_data = "\n".join(csv_lines)
+        
+        st.download_button(
+            label="📥 グラフデータをCSVでダウンロード (Excel対応)",
+            data=csv_data.encode("utf-8-sig"), # 文字化け防止
+            file_name="parallel_simulation_results.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
     with c_right:
         st.subheader("④ 流量分配の自動計算 ＆ 計算証明")
@@ -386,7 +408,6 @@ else:
         st.info(f"【内訳】 共通入口: {dp_in:.3f} kPa ＋ 並列部: {dp_par:.3f} kPa ＋ 共通出口: {dp_out:.3f} kPa")
         st.info(f"**並列部の流量分配: ルートA = {Q_A:.2f} L/min / ルートB = {Q_B:.2f} L/min**")
         
-        # 並列部の詳細証明用データを再度取得
         _, details_A = calc_total_loss_system(Q_A, st.session_state.elements_A, p_branch_Pa, rho0, nu1)
         _, details_B = calc_total_loss_system(Q_B, st.session_state.elements_B, p_branch_Pa, rho0, nu1)
         
