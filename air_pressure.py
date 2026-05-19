@@ -15,7 +15,7 @@ mode = st.sidebar.radio(
     [
         "➡️ 直列モデル (1本道)", 
         "🔀 並列・分岐モデル (3エリア拡張版)",
-        "📖 使い方・Tips集 (FAQ)"  # ← 新しく追加！
+        "📖 使い方・Tips集 (FAQ)"
     ]
 )
 
@@ -85,7 +85,7 @@ def calc_total_loss_system(Q_Lmin_ANR, elements, p1_val, rho0_val, nu1_val):
             inside_sqrt = current_p**2 - lambda_f * (L / d_m) * rho0_val * p0 * (u0_local**2)
             dp_Pa = current_p - np.sqrt(inside_sqrt) if inside_sqrt > 0 else 0
             
-            details.append({"cat": cat, "name": item["name"], "u": u_local, "Re": Re_local, "dp": dp_Pa/1000.0, "lambda_f": lambda_f, "p_in": current_p, "L": L, "d_m": d_m, "u0": u0_local})
+            details.append({"cat": cat, "name": item["name"], "u": u_local, "Re": Re_local, "dp": dp_Pa/1000.0, "lambda_f": lambda_f, "p_in": current_p, "L": L, "d_m": d_m, "u0": u0_local, "rho": rho_current})
             
         elif cat == "expansion" or cat == "contraction":
             d_in_m = item["d1"] * 1e-3
@@ -107,7 +107,7 @@ def calc_total_loss_system(Q_Lmin_ANR, elements, p1_val, rho0_val, nu1_val):
             dynamic_p = rho_current * (u1**2) / 2.0
             dp_Pa = zeta * dynamic_p
             
-            details.append({"cat": cat, "name": item["name"], "u1": u1, "A1": A1, "A2": A2, "zeta": zeta, "rho": rho_current, "dp": dp_Pa/1000.0})
+            details.append({"cat": cat, "name": item["name"], "u1": u1, "A1": A1, "A2": A2, "zeta": zeta, "rho": rho_current, "dp": dp_Pa/1000.0, "p_in": current_p})
             
         elif cat == "fitting":
             d_m = item["d1"] * 1e-3
@@ -117,7 +117,7 @@ def calc_total_loss_system(Q_Lmin_ANR, elements, p1_val, rho0_val, nu1_val):
             dynamic_p = rho_current * (u_local**2) / 2.0
             dp_Pa = zeta * dynamic_p
             
-            details.append({"cat": cat, "name": item["name"], "u": u_local, "zeta": zeta, "rho": rho_current, "dp": dp_Pa/1000.0})
+            details.append({"cat": cat, "name": item["name"], "u": u_local, "zeta": zeta, "rho": rho_current, "dp": dp_Pa/1000.0, "p_in": current_p})
 
         current_p -= dp_Pa
         total_dp_kPa += (dp_Pa / 1000.0)
@@ -253,11 +253,30 @@ def render_html_diagram(elements_list):
     html_code += '</div>'
     st.markdown(html_code, unsafe_allow_html=True)
 
+def render_fluid_properties_proof():
+    """環境・流体条件の基礎数値がどう計算されたかを提示する"""
+    with st.expander("🌍 【基礎物性】環境・流体条件の事前計算プロセス", expanded=False):
+        st.markdown("**① 飽和水蒸気圧 $p_s$ (Tetensの式)**")
+        st.latex(rf"p_s = 610.78 \times 10^{{\frac{{7.5 \times {t}}}{{{t} + 237.3}}}} = {p_s:.2f} \ \text{{Pa}}")
+
+        st.markdown("**② 基準状態の湿り空気密度 $\\rho_0$**")
+        st.latex(rf"\rho_0 = {rho0_std:.3f} \times \frac{{{T0_C+273.15:.2f}}}{{{t+273.15:.2f}}} \times \frac{{{p0:.1f} - 0.5040 \times {phi} \times {p_s:.2f}}}{{{p0:.1f}}} = {rho0:.4f} \ \text{{kg/m}}^3")
+
+        st.markdown("**③ 空気粘度 $\\mu$ (サザーランドの式)**")
+        st.latex(rf"\mu = {mu0_e5*1e-5:.3e} \times \frac{{{T0_C+273.15:.2f}+{C}}}{{{t+273.15:.2f}+{C}}} \times \left(\frac{{{t+273.15:.2f}}}{{{T0_C+273.15:.2f}}}\right)^{{1.5}} = {mu:.4e} \ \text{{Pa・s}}")
+
+        st.markdown("**④ 供給口での空気密度 $\\rho_1$ と動粘度 $\\nu_1$**")
+        st.latex(rf"\rho_1 = \rho_0 \times \frac{{p_1\text{{(絶対圧)}}}}{{p_0}} = {rho0:.4f} \times \frac{{{p1:.1f}}}{{{p0:.1f}}} = {rho1:.4f} \ \text{{kg/m}}^3")
+        st.latex(rf"\nu_1 = \frac{{\mu}}{{\rho_1}} = \frac{{{mu:.4e}}}{{{rho1:.4f}}} = {nu1:.4e} \ \text{{m}}^2\text{{/s}}")
+
+
 def render_math_proof(details):
     for i, res in enumerate(details):
         with st.expander(f"パーツ {i+1} : {res['name']} の計算証明"):
+            st.markdown(f"**【突入時の空気状態】** 絶対圧力 $p_{{in}} = {res['p_in']:.1f}$ Pa $\\rightarrow$ 局所密度 $\\rho = {res['rho']:.4f}$ kg/m³")
             if res["cat"] == "pipe":
                 st.markdown("**【管摩擦損失 (Eq.2)】**")
+                st.latex(rf"u_0 = {res['u0']:.2f}\ \text{{m/s}} \quad (\text{{ANR換算流速}})")
                 st.latex(rf"Re = {res['Re']:.1f}, \quad \lambda = {res['lambda_f']:.4f}")
                 st.latex(r"\Delta p_\lambda = p_{in} - \sqrt{p_{in}^2 - \lambda \frac{L}{d} \rho_0 p_0 u_0^2}")
                 st.latex(rf"= \mathbf{{{res['dp']:.4f}\ \text{{kPa}}}}")
@@ -332,6 +351,9 @@ if mode == "➡️ 直列モデル (1本道)":
         target_Q = st.number_input("確認したい流量 Q を入力 [L/min (ANR)]", value=15.0, key="q_ser")
         total_dp, details = calc_total_loss_system(target_Q, st.session_state.elements_series, p1, rho0, nu1)
         st.success(f"**システム全体の圧力損失 Δp = {total_dp:.3f} kPa**")
+        
+        # ▼ここに追加！▼
+        render_fluid_properties_proof()
         render_math_proof(details)
 
 elif mode == "🔀 並列・分岐モデル (3エリア拡張版)":
@@ -412,6 +434,9 @@ elif mode == "🔀 並列・分岐モデル (3エリア拡張版)":
         
         _, details_A = calc_total_loss_system(Q_A, st.session_state.elements_A, p_branch_Pa, rho0, nu1)
         _, details_B = calc_total_loss_system(Q_B, st.session_state.elements_B, p_branch_Pa, rho0, nu1)
+        
+        # ▼ここに追加！▼
+        render_fluid_properties_proof()
         
         if len(details_in) > 0:
             st.markdown("##### 🟨 共通入口 の計算証明")
