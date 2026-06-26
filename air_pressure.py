@@ -101,7 +101,7 @@ def calc_total_loss_system(Q_Lmin_ANR, elements, p1_val, rho0_val, nu1_val):
                 zeta_e0 = 1.0 
                 zeta = zeta_e0 * (1 - A1/A2)**2
             else:
-                zeta_c0 = 0.5 
+                zeta_c0 = 0.47 
                 zeta = zeta_c0 * (1 - A1/A2)
                 
             dynamic_p = rho_current * (u1**2) / 2.0
